@@ -1590,13 +1590,34 @@
       sun: { label: 'Sunday',   acts: ['act-8','act-9','act-10'] }
     };
 
+    // Pick the most natural-sounding voice on the device.
+    // iPad/Mac "Premium" and "Enhanced" voices sound far more human than the
+    // default compact ones, so they win whenever they're installed.
     let voice = null;
+    const NOVELTY = /albert|bad news|bahh|bells|boing|bubbles|cellos|wobble|fred|jester|junior|organ|superstar|ralph|trinoids|whisper|zarvox|good news|grandma|grandpa|rocko|eddy|flo\b|reed|sandy|shelley/i;
+    const NICE = /karen|lee|matilda|catherine|gordon|samantha|ava|zoe|evan|nathan|joelle|serena|kate|siri/i;
+    function scoreVoice(v) {
+      const id = (v.name + ' ' + (v.voiceURI || '')).toLowerCase();
+      let s = 0;
+      if (!/^en/i.test(v.lang)) return -999;
+      if (/en[-_]au/i.test(v.lang)) s += 4;
+      else if (/en[-_](gb|us|nz|ie)/i.test(v.lang)) s += 1;
+      if (/premium/.test(id)) s += 20;
+      else if (/enhanced|neural|natural/.test(id)) s += 12;
+      if (/google/.test(id)) s += 6;          // Chrome's online voices are smooth
+      if (NICE.test(v.name)) s += 3;
+      if (NOVELTY.test(v.name)) s -= 30;
+      if (/compact/.test(id)) s -= 2;
+      return s;
+    }
     function pickVoice() {
       try {
         const vs = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-        voice = vs.find(v => /en-AU/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null;
+        voice = vs.slice().sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+        if (voice && scoreVoice(voice) < 0) voice = null;
       } catch (e) {}
     }
+    window.kidVoiceName = () => voice ? voice.name + ' (' + voice.lang + ')' : 'device default';
     if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 
     function kidName() {
@@ -1608,7 +1629,9 @@
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         if (voice) u.voice = voice;
-        u.rate = 0.85; u.pitch = 1.15;
+        // Near-default rate and pitch sound most human; raising the pitch is what made it robotic.
+        u.rate = 0.92; u.pitch = 1.0;
+        if (voice) u.lang = voice.lang;
         document.querySelectorAll('.kid-tile.speaking').forEach(t => t.classList.remove('speaking'));
         if (el) { el.classList.add('speaking'); u.onend = u.onerror = () => el.classList.remove('speaking'); }
         speechSynthesis.speak(u);
